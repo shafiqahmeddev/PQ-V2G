@@ -1,0 +1,245 @@
+# PQ-V2G Docker Compose Configuration
+# Orchestrates all system components for development and testing
+
+version: '3.8'
+
+services:
+  # Post-Quantum Certificate Authority
+  pq-ca:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ca
+    container_name: pq-v2g-ca
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./certificates:/app/certificates
+      - ./config:/app/config
+      - ./logs:/app/logs
+    environment:
+      - PQ_V2G_ROLE=ca
+      - PQ_V2G_CONFIG=/app/config/pq_v2g_config.yaml
+    networks:
+      - pq-v2g-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Charging Station Management System (CSMS)
+  csms:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.csms
+    container_name: pq-v2g-csms
+    ports:
+      - "8081:8081"
+      - "8443:8443"    # TLS port
+    volumes:
+      - ./certificates:/app/certificates
+      - ./config:/app/config
+      - ./logs:/app/logs
+    environment:
+      - PQ_V2G_ROLE=csms
+      - PQ_V2G_CONFIG=/app/config/pq_v2g_config.yaml
+    depends_on:
+      - pq-ca
+      - redis
+    networks:
+      - pq-v2g-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Electric Vehicle Charging Station (EVSE)
+  evse:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.evse
+    container_name: pq-v2g-evse
+    ports:
+      - "8082:8082"
+      - "8444:8444"    # TLS port for EV communication
+    volumes:
+      - ./certificates:/app/certificates
+      - ./config:/app/config
+      - ./logs:/app/logs
+    environment:
+      - PQ_V2G_ROLE=evse
+      - PQ_V2G_CONFIG=/app/config/pq_v2g_config.yaml
+      - EVSE_ID=EVSE001
+    depends_on:
+      - csms
+      - policy-node
+    networks:
+      - pq-v2g-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8082/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Electric Vehicle (EV)
+  ev:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ev
+    container_name: pq-v2g-ev
+    ports:
+      - "8083:8083"
+    volumes:
+      - ./certificates:/app/certificates
+      - ./config:/app/config
+      - ./logs:/app/logs
+    environment:
+      - PQ_V2G_ROLE=ev
+      - PQ_V2G_CONFIG=/app/config/pq_v2g_config.yaml
+      - EV_ID=EV001
+    depends_on:
+      - evse
+    networks:
+      - pq-v2g-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Policy Node (NR Sidelink)
+  policy-node:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.policy
+    container_name: pq-v2g-policy
+    ports:
+      - "8084:8084"
+      - "8844:8844"    # NR sidelink port
+    volumes:
+      - ./certificates:/app/certificates
+      - ./config:/app/config
+      - ./logs:/app/logs
+    environment:
+      - PQ_V2G_ROLE=policy_node
+      - PQ_V2G_CONFIG=/app/config/pq_v2g_config.yaml
+    depends_on:
+      - pq-ca
+    networks:
+      - pq-v2g-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis for session storage and caching
+  redis:
+    image: redis:7.0-alpine
+    container_name: pq-v2g-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - pq-v2g-network
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: pq-v2g-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.enable-lifecycle'
+    networks:
+      - pq-v2g-network
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: pq-v2g-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana:/etc/grafana/provisioning
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    depends_on:
+      - prometheus
+    networks:
+      - pq-v2g-network
+
+  # Test Runner for automated testing
+  test-runner:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.test
+    container_name: pq-v2g-test-runner
+    volumes:
+      - ./tests:/app/tests
+      - ./config:/app/config
+      - ./certificates:/app/certificates
+      - ./logs:/app/logs
+    environment:
+      - PQ_V2G_ROLE=test_runner
+      - PQ_V2G_CONFIG=/app/config/pq_v2g_config.yaml
+      - PYTHONPATH=/app
+    depends_on:
+      - csms
+      - evse
+      - ev
+      - policy-node
+    networks:
+      - pq-v2g-network
+    command: python -m pytest tests/ -v --tb=short
+
+  # Performance Monitor
+  performance-monitor:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.monitor
+    container_name: pq-v2g-monitor
+    ports:
+      - "8085:8085"
+    volumes:
+      - ./config:/app/config
+      - ./logs:/app/logs
+    environment:
+      - PQ_V2G_ROLE=monitor
+      - PQ_V2G_CONFIG=/app/config/pq_v2g_config.yaml
+    depends_on:
+      - prometheus
+      - redis
+    networks:
+      - pq-v2g-network
+
+networks:
+  pq-v2g-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  redis-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+# Development override for local development
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up

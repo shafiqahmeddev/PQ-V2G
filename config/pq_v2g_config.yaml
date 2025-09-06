@@ -1,0 +1,303 @@
+# PQ-V2G System Configuration
+# Quantum-Safe Vehicle-to-Grid Communication Configuration
+
+# System Information
+system:
+  name: "PQ-V2G"
+  version: "1.0.0"
+  description: "Quantum-Safe Identity, Privacy, and Resilience for V2G Networks"
+  author: "Shafiq Ahmed, University of Essex"
+
+# Cryptographic Configuration
+crypto:
+  # Post-Quantum Key Encapsulation Mechanism
+  kem:
+    algorithm: "ML-KEM-768"          # NIST FIPS 203
+    public_key_size: 1184            # bytes
+    ciphertext_size: 1088            # bytes
+    shared_secret_size: 32           # bytes
+    
+  # Post-Quantum Digital Signatures  
+  signature:
+    primary: "ML-DSA-65"             # NIST FIPS 204
+    alternative: "SLH-DSA"           # NIST FIPS 205 (conservative backup)
+    ml_dsa:
+      public_key_size: 1952          # bytes
+      signature_size: 3309           # bytes
+    slh_dsa:
+      public_key_size: 32            # bytes (compact variant)
+      signature_size: 7856           # bytes (larger but stateless)
+      
+  # Security Parameters
+  security:
+    constant_time: true              # Constant-time implementations
+    masked_operations: true          # Side-channel protection
+    timing_attack_protection: true   # KyberSlash mitigation
+    memory_protection: true          # Stack canaries, ASLR
+    
+  # TLS Configuration
+  tls:
+    version: "1.3"                   # TLS version
+    cipher_suites:
+      - "TLS_ML_KEM_768_WITH_ML_DSA_65_SHA256"
+      - "TLS_ML_KEM_768_WITH_SLH_DSA_SHA256"
+    session_resumption: false        # Disabled for forward secrecy
+    export_key_material: true        # For token derivation
+    
+# Network Configuration
+network:
+  # Physical Layer
+  plc:
+    bandwidth_mbps: 6.0              # HomePlug Green PHY
+    mtu_bytes: 1500                  # Maximum transmission unit
+    latency_ms: 5                    # Physical layer latency
+    
+  # Transport Layer
+  transport:
+    rtt_ms: 20                       # Round-trip time baseline
+    goodput_factor: 0.85             # Effective throughput ratio
+    timeout_seconds: 30              # Connection timeout
+    max_retries: 3                   # Maximum retry attempts
+    
+  # Application Layer
+  application:
+    websocket_port: 8080             # OCPP WebSocket port
+    tls_port: 8443                   # TLS server port
+    sidelink_port: 8844              # NR sidelink port
+    management_port: 8000            # Management interface
+    
+# Identity and Certificate Management
+identity:
+  # Certificate Authority
+  ca:
+    root_validity_years: 10          # Root CA certificate validity
+    intermediate_validity_years: 5   # Intermediate CA validity
+    end_entity_validity_days: 30     # EV certificate validity
+    evse_validity_years: 2           # EVSE certificate validity
+    
+  # Pseudonym Management
+  pseudonyms:
+    pool_size: 10                    # Certificates per vehicle
+    rotation_policy: "piecewise_constant"  # Rotation strategy
+    hazard_function:
+      short_gap_rate: 0.5            # High rotation for short gaps
+      long_gap_rate: 0.1             # Low rotation for long gaps
+      transition_hours: 2            # Transition point
+    max_issuance_per_day: 100        # PKI capacity limit
+    
+  # Certificate Profiles
+  profiles:
+    compression: true                # Subject field compression
+    cache_roots: true                # Root certificate caching
+    staple_intermediates: true       # OCSP stapling
+    max_chain_depth: 3               # Maximum certificate chain length
+
+# Privacy Configuration  
+privacy:
+  # Unlinkability Parameters
+  linking:
+    target_probability: 0.05         # Maximum linking probability
+    observation_window_hours: 24     # Analysis time window
+    epsilon_side_channel: 0.01       # Side channel leak budget
+    
+  # Session Anonymity
+  anonymity:
+    derive_tokens: true              # Use TLS exporter for tokens
+    avoid_stable_identifiers: true   # No persistent IDs on wire
+    metadata_protection: true        # Protect timing patterns
+    
+# Outage Resilience Configuration
+resilience:
+  # Sidelink Configuration
+  sidelink:
+    technology: "NR-Release17"       # 5G NR sidelink
+    range_meters: 300                # Communication range
+    broadcast_interval_seconds: 10   # Token broadcast frequency
+    discovery_timeout_seconds: 30    # Device discovery timeout
+    
+  # Token Management
+  tokens:
+    max_energy_kwh: 50               # Maximum energy per token
+    expiry_minutes: 60               # Token validity period
+    reconciliation_timeout_hours: 24 # Reconciliation deadline
+    max_concurrent_tokens: 10        # Outstanding token limit
+    
+  # Availability Model
+  availability:
+    backhaul_probability: 0.95       # p - backhaul availability
+    sidelink_coverage: 0.80          # q - sidelink coverage
+    token_success_rate: 0.99         # α - token verification rate
+
+# Protocol Configuration
+protocols:
+  # ISO 15118-20
+  iso15118:
+    version: "20"                    # ISO 15118 version
+    pnc_enabled: true                # Plug-and-Charge support
+    mutual_auth_required: true       # Mutual TLS authentication
+    message_timeout_seconds: 30      # Message timeout
+    max_message_size_bytes: 65536    # Maximum message size
+    
+  # OCPP 2.0.1
+  ocpp:
+    version: "2.0.1"                 # OCPP version
+    security_profile: 3              # TLS with client certificates
+    message_format: "JSON"           # JSON message format
+    keepalive_interval_seconds: 60   # WebSocket keepalive
+    max_message_size_bytes: 1048576  # 1MB message limit
+    minimal_footprint: true          # Resource-constrained support
+
+# Performance Configuration
+performance:
+  # Latency Targets
+  latency:
+    start_of_charge_ms: 50           # Target start-of-charge delay
+    perceptibility_threshold_ms: 100 # Human perception threshold
+    handshake_timeout_ms: 5000       # TLS handshake timeout
+    
+  # Throughput Targets  
+  throughput:
+    sessions_per_hour: 100           # Peak session capacity
+    concurrent_connections: 50       # Simultaneous connections
+    queue_length_limit: 10           # Maximum queue length
+    
+  # Memory Constraints
+  memory:
+    max_heap_mb: 256                 # H2 profile memory limit
+    stack_size_kb: 64                # Stack size limit
+    certificate_cache_mb: 10         # Certificate cache size
+    buffer_pool_mb: 20               # I/O buffer pool
+    
+# Hardware Profiles
+hardware:
+  # Profile H1: ARM Cortex-A (Full Linux)
+  h1:
+    cpu: "ARM Cortex-A"
+    memory_gb: 1
+    storage_gb: 8
+    os: "Linux"
+    dynamic_memory: true
+    features:
+      - "hardware_crypto"
+      - "vector_instructions"
+      - "cache_coherency"
+      
+  # Profile H2: Microcontroller (RTOS)
+  h2:
+    cpu: "ARM Cortex-M"
+    memory_mb: 256
+    storage_mb: 64
+    os: "RTOS"
+    dynamic_memory: false
+    features:
+      - "constant_time_only"
+      - "fixed_buffers"
+      - "minimal_footprint"
+
+# Logging Configuration
+logging:
+  # Log Levels
+  level: "INFO"                      # Default log level
+  structured: true                   # Structured logging format
+  
+  # Log Categories
+  categories:
+    crypto: "DEBUG"                  # Cryptographic operations
+    network: "INFO"                  # Network events
+    protocol: "INFO"                 # Protocol messages
+    performance: "INFO"              # Performance metrics
+    security: "WARNING"              # Security events
+    privacy: "INFO"                  # Privacy events
+    
+  # Log Destinations
+  handlers:
+    console:
+      enabled: true
+      format: "human"
+    file:
+      enabled: true
+      path: "logs/pq_v2g.log"
+      rotation: "daily"
+      retention_days: 30
+    metrics:
+      enabled: true
+      prometheus_port: 9090
+      
+# Testing Configuration
+testing:
+  # Test Parameters
+  parameters:
+    confidence_level: 0.95           # Statistical confidence
+    power: 0.80                      # Statistical power  
+    effect_size_ms: 10               # Minimum detectable effect
+    sample_size_per_arm: 100         # Test sample size
+    
+  # Test Scenarios
+  scenarios:
+    baseline:
+      name: "Classical TLS"
+      kem: "ECDHE"
+      signature: "ECDSA"
+    treatment:
+      name: "Post-Quantum TLS"  
+      kem: "ML-KEM-768"
+      signature: "ML-DSA-65"
+      
+  # Channel Conditions
+  channels:
+    ideal:
+      loss_rate: 0.0
+      jitter_ms: 0
+      bandwidth_factor: 1.0
+    realistic:
+      loss_rate: 0.01
+      jitter_ms: 5
+      bandwidth_factor: 0.85
+    degraded:
+      loss_rate: 0.05
+      jitter_ms: 20
+      bandwidth_factor: 0.60
+
+# Monitoring Configuration
+monitoring:
+  # Metrics Collection
+  metrics:
+    enabled: true
+    collection_interval_seconds: 10
+    retention_days: 7
+    
+  # Key Performance Indicators
+  kpis:
+    - "handshake_latency_ms"
+    - "signature_verification_ms"
+    - "session_establishment_ms"
+    - "certificate_validation_ms"
+    - "token_verification_ms"
+    - "memory_usage_mb"
+    - "cpu_utilization_percent"
+    - "queue_length"
+    - "error_rate"
+    - "availability_percent"
+    
+  # Alerts
+  alerts:
+    latency_threshold_ms: 200
+    error_rate_threshold: 0.05
+    memory_threshold_mb: 200
+    queue_threshold: 8
+
+# Development Configuration
+development:
+  debug: true
+  hot_reload: true
+  mock_hardware: true
+  simulation_mode: true
+  test_vectors: true
+  
+# Production Configuration  
+production:
+  debug: false
+  security_hardening: true
+  audit_logging: true
+  compliance_mode: true
+  performance_monitoring: true

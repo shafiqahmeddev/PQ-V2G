@@ -1,0 +1,80 @@
+# PQ-V2G Prometheus Configuration
+# Monitoring configuration for PQ-V2G system components
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093
+
+# Load rules once and periodically evaluate them according to the global 'evaluation_interval'
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+# Scrape configuration
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # PQ-V2G Certificate Authority
+  - job_name: 'pq-v2g-ca'
+    static_configs:
+      - targets: ['pq-v2g-ca:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # PQ-V2G CSMS
+  - job_name: 'pq-v2g-csms'
+    static_configs:
+      - targets: ['csms:8081']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # PQ-V2G EVSE
+  - job_name: 'pq-v2g-evse'
+    static_configs:
+      - targets: ['evse:8082']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # PQ-V2G EV
+  - job_name: 'pq-v2g-ev'
+    static_configs:
+      - targets: ['ev:8083']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # PQ-V2G Policy Node
+  - job_name: 'pq-v2g-policy'
+    static_configs:
+      - targets: ['policy-node:8084']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # PQ-V2G Performance Monitor
+  - job_name: 'pq-v2g-monitor'
+    static_configs:
+      - targets: ['performance-monitor:8085']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Redis monitoring
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Node Exporter (if available)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 30s

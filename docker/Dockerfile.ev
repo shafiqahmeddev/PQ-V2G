@@ -1,0 +1,49 @@
+# PQ-V2G EV Dockerfile
+# Specialized container for Electric Vehicle client
+
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    PQ_V2G_ROLE=ev
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    libssl-dev \
+    libffi-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create application user
+RUN groupadd -r pqv2g && useradd -r -g pqv2g pqv2g
+
+# Set work directory
+WORKDIR /app
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY src/ ./src/
+COPY config/ ./config/
+COPY scripts/ ./scripts/
+
+# Create necessary directories
+RUN mkdir -p certificates logs && \
+    chown -R pqv2g:pqv2g /app
+
+# Switch to non-root user
+USER pqv2g
+
+# Expose EV client port
+EXPOSE 8083
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8083/health || exit 1
+
+# Start EV client
+CMD ["python", "-m", "src.roles.ev.ev_client", "--config", "config/pq_v2g_config.yaml", "--ev-id", "${EV_ID:-EV001}"]
